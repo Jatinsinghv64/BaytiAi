@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>ANDROID_CLIENT_ID</key>
+	<string>1049840318668-s2olv5t2ta0emghotu5cb3mto4pecql0.apps.googleusercontent.com</string>
+	<key>API_KEY</key>
+	<string>AIzaSyBDxqMV9bRvp4URNFvns4HxHLPSVLYrgbw</string>
+	<key>GCM_SENDER_ID</key>
+	<string>1049840318668</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>BUNDLE_ID</key>
+	<string>com.example.baytiai</string>
+	<key>PROJECT_ID</key>
+	<string>property-c1175</string>
+	<key>STORAGE_BUCKET</key>
+	<string>property-c1175.appspot.com</string>
+	<key>IS_ADS_ENABLED</key>
+	<false></false>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false></false>
+	<key>IS_APPINVITE_ENABLED</key>
+	<true></true>
+	<key>IS_GCM_ENABLED</key>
+	<true></true>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true></true>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:1049840318668:ios:b57aec53e7508aeef3aa69</string>
+	<key>DATABASE_URL</key>
+	<string>https://property-c1175-default-rtdb.firebaseio.com</string>
+</dict>
+</plist>
