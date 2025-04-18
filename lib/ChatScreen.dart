@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:intl/intl.dart';
@@ -34,7 +33,7 @@ class _PropertyChatScreenState extends State<PropertyChatScreen> {
       "Hello! I'm your AI real estate assistant. How can I help you find your perfect property today?\n\n"
           "You can ask me:\n"
           "- \"Show me 3 bedroom villas with pools\"\n"
-          "- \"Find apartments under \$300,000 in downtown\"\n"
+          "- \"Find apartments under 300,000 QAR in doha\"\n"
           "- \"What luxury properties do you have?\"",
       isGreeting: true,
     );
@@ -104,8 +103,12 @@ class _PropertyChatScreenState extends State<PropertyChatScreen> {
 
     try {
       final aiResponse = await _getAIResponse(userMessage);
+      final parsed = jsonDecode(aiResponse) as Map<String, dynamic>;
 
-      if (_shouldSearchProperties(aiResponse)) {
+      // Decide if this is a property search or just a chat reply
+      if (parsed['searchParams'] != null &&
+          parsed['searchParams'] is Map &&
+          (parsed['searchParams'] as Map).isNotEmpty) {
         setState(() => _isTyping = true);
         _filteredProperties = await _searchProperties(aiResponse);
         setState(() {
@@ -118,12 +121,14 @@ class _PropertyChatScreenState extends State<PropertyChatScreen> {
             "I couldn't find properties matching your criteria. Try adjusting your search.",
           );
         } else {
-          _addBotMessage(
-            "Here are ${_filteredProperties.length} matching properties:",
-          );
+          // First, show the friendly text from the AI
+          _addBotMessage(parsed['response']);
+          // Then show the header for the property cards
+          _addBotMessage("Here are ${_filteredProperties.length} matching properties:");
         }
       } else {
-        _addBotMessage(aiResponse);
+        // Non-search reply: only display the AI's "response" field
+        _addBotMessage(parsed['response']);
       }
     } catch (e) {
       _addBotMessage("Sorry, I'm having trouble responding. Please try again.");
@@ -135,37 +140,51 @@ class _PropertyChatScreenState extends State<PropertyChatScreen> {
 
   Future<String> _getAIResponse(String prompt) async {
     final apiKey = dotenv.env['GEMINI_API_KEY'];
-    final url = Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=$apiKey');
+    final url = Uri.parse(
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=$apiKey',
+    );
 
-    final propertyTypesSnapshot = await _firestore.collection('properties').get();
+    final propertyTypesSnapshot =
+    await _firestore.collection('properties').get();
     final propertyTypes = propertyTypesSnapshot.docs
         .map((doc) => doc['propertyType'].toString())
         .toSet()
         .toList();
 
-    // More strict prompt to enforce JSON response
     final systemPrompt = '''
-  You are a real estate assistant that MUST respond in JSON format.
-  When users ask about properties, respond EXACTLY with this format:
-  {
-    "response": "Your text response to the user",
-    "searchParams": {
-      "propertyType": "type or null",
-      "minBedrooms": number or null,
-      "maxPrice": number or null,
-      "location": "string or null",
-      "amenities": ["array", "or", "null"]
-    }
-  }
+You're a warm, conversational real estate assistant focused on helping people find properties in Qatar. 
 
-  If it's not a property search, respond with:
-  {
-    "response": "Your text response",
-    "searchParams": null
-  }
+Key parameters to consider:
+- Property type (${propertyTypes.join(', ')})
+- Price/Rent ranges
+- Bedrooms/bathrooms
+- Location areas
+- Amenities (pool, gym, beachfront, etc.)
+- Construction year
+- Property size (sqm)
+- Garage availability
+- Developer names
 
-  Available property types: ${propertyTypes.join(', ')}
-  ''';
+Understand synonyms and related terms:
+- "Near beach" = beachfront
+- "New construction" = yearBuilt > 2022
+- "Studio" = bedrooms = 0
+- "Penthouse" = apartment with luxury amenities
+
+Example response:
+{
+  "response": "I found modern 2-bed apartments in Lusail with beach access",
+  "searchParams": {
+    "propertyType": "apartment",
+    "minBedrooms": 2,
+    "maxPrice": 3000000,
+    "location": "Lusail",
+    "amenities": ["beachfront"],
+    "minYearBuilt": 2020,
+    "hasGarage": true
+  }
+}
+''';
 
     try {
       final response = await http.post(
@@ -175,60 +194,52 @@ class _PropertyChatScreenState extends State<PropertyChatScreen> {
           'contents': [
             {
               'role': 'user',
-              'parts': [{'text': systemPrompt}]
+              'parts': [
+                {'text': systemPrompt}
+              ]
             },
             ..._conversationHistory.map((msg) => {
               'role': msg['role'],
-              'parts': [{'text': msg['content']}]
+              'parts': [
+                {'text': msg['content']}
+              ]
             }),
             {
               'role': 'user',
-              'parts': [{'text': 'STRICTLY respond in JSON format as instructed. $prompt'}]
+              'parts': [
+                {
+                  'text':
+                  'STRICTLY respond in JSON format as instructed. $prompt'
+                }
+              ]
             }
           ],
           'generationConfig': {
-            'temperature': 0.3, // Lower temperature for more predictable responses
+            'temperature': 0.3,
             'maxOutputTokens': 500,
-            'response_mime_type': 'application/json' // Request JSON response
+            'response_mime_type': 'application/json'
           }
         }),
       );
 
       if (response.statusCode == 200) {
         final responseBody = jsonDecode(response.body);
-        final textResponse = responseBody['candidates'][0]['content']['parts'][0]['text'];
-
-        // Validate the response is proper JSON
-        final jsonResponse = jsonDecode(textResponse);
-        if (jsonResponse is! Map<String, dynamic>) {
-          throw FormatException('Invalid JSON response format');
-        }
-
+        final textResponse =
+        responseBody['candidates'][0]['content']['parts'][0]['text'];
+        // Validate proper JSON
+        jsonDecode(textResponse);
         return textResponse;
       } else {
         throw Exception('API Error: ${response.body}');
       }
     } catch (e) {
       debugPrint('Error in _getAIResponse: $e');
-      // Return a fallback JSON response if parsing fails
       return '''
-    {
-      "response": "I encountered an error processing your request. Please try again.",
-      "searchParams": null
-    }
-    ''';
-    }
-  }
-
-  bool _shouldSearchProperties(String aiResponse) {
-    try {
-      final jsonResponse = jsonDecode(aiResponse);
-      return jsonResponse['searchParams'] != null &&
-          jsonResponse['searchParams'] is Map &&
-          jsonResponse['searchParams'].isNotEmpty;
-    } catch (e) {
-      debugPrint('Error checking search params: $e');
-      return false;
+{
+  "response": "I encountered an error processing your request. Please try again.",
+  "searchParams": null
+}
+''';
     }
   }
 
@@ -238,23 +249,44 @@ class _PropertyChatScreenState extends State<PropertyChatScreen> {
       final searchParams = jsonResponse['searchParams'] as Map<String, dynamic>;
       Query query = _firestore.collection('properties');
 
+      // Property Type
       if (searchParams['propertyType'] != null) {
         query = query.where('propertyType', isEqualTo: searchParams['propertyType']);
       }
-      if (searchParams['minBedrooms'] != null) {
-        query = query.where('bedrooms', isGreaterThanOrEqualTo: searchParams['minBedrooms']);
-      }
+
+      // Price/Rent Handling
       if (searchParams['maxPrice'] != null) {
         query = query.where('price', isLessThanOrEqualTo: searchParams['maxPrice']);
       }
-      if (searchParams['location'] != null) {
-        query = query.where('location', isEqualTo: searchParams['location']);
+      if (searchParams['maxRent'] != null) {
+        query = query.where('rent', isLessThanOrEqualTo: searchParams['maxRent']);
       }
+
+      // Numeric Ranges
+      _applyRange(query, 'bedrooms', searchParams);
+      _applyRange(query, 'bathrooms', searchParams);
+      _applyRange(query, 'yearBuilt', searchParams);
+      _applyRange(query, 'propertySize', searchParams);
+
+      // Location
+      if (searchParams['location'] != null) {
+        query = query.where('location', isEqualTo: searchParams['location'].toString().toLowerCase());
+      }
+
+      // Amenities
       if (searchParams['amenities'] != null) {
         final amenities = List<String>.from(searchParams['amenities']);
-        for (final amenity in amenities) {
-          query = query.where('amenities', arrayContains: amenity);
-        }
+        query = query.where('amenities', arrayContainsAny: amenities);
+      }
+
+      // Boolean Filters
+      if (searchParams['hasGarage'] != null) {
+        query = query.where('garage', isEqualTo: searchParams['hasGarage']);
+      }
+
+      // Developer
+      if (searchParams['developer'] != null) {
+        query = query.where('developedBy', isEqualTo: searchParams['developer']);
       }
 
       final snapshot = await query.get();
@@ -265,6 +297,14 @@ class _PropertyChatScreenState extends State<PropertyChatScreen> {
     }
   }
 
+  void _applyRange(Query query, String field, Map<String, dynamic> params) {
+    if (params['min$field'] != null) {
+      query = query.where(field, isGreaterThanOrEqualTo: params['min$field']);
+    }
+    if (params['max$field'] != null) {
+      query = query.where(field, isLessThanOrEqualTo: params['max$field']);
+    }
+  }
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -301,16 +341,20 @@ class _PropertyChatScreenState extends State<PropertyChatScreen> {
                 controller: _scrollController,
                 slivers: [
                   SliverPadding(
-                    padding: const EdgeInsets.only(top: 16, bottom: 100),
+                    padding:
+                    const EdgeInsets.only(top: 16, bottom: 100),
                     sliver: SliverList(
                       delegate: SliverChildBuilderDelegate(
                             (context, index) {
                           if (index == 0 && _showPropertyResults) {
                             return _buildPropertyResults();
                           }
-                          final messageIndex = _showPropertyResults ? index - 1 : index;
-                          if (messageIndex >= _messages.length) return null;
-                          return _buildChatBubble(_messages[messageIndex]);
+                          final messageIndex =
+                          _showPropertyResults ? index - 1 : index;
+                          if (messageIndex >= _messages.length)
+                            return null;
+                          return _buildChatBubble(
+                              _messages[messageIndex]);
                         },
                       ),
                     ),
@@ -332,10 +376,13 @@ class _PropertyChatScreenState extends State<PropertyChatScreen> {
 
   Widget _buildChatBubble(ChatMessage message) {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      margin:
+      const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: message.isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+        mainAxisAlignment: message.isUser
+            ? MainAxisAlignment.end
+            : MainAxisAlignment.start,
         children: [
           if (!message.isUser)
             Container(
@@ -343,7 +390,8 @@ class _PropertyChatScreenState extends State<PropertyChatScreen> {
               child: CircleAvatar(
                 radius: 16,
                 backgroundColor: Colors.blue[50],
-                child: const Icon(Icons.home_work, size: 16, color: Colors.blue),
+                child: const Icon(Icons.home_work,
+                    size: 16, color: Colors.blue),
               ),
             ),
           Flexible(
@@ -353,21 +401,27 @@ class _PropertyChatScreenState extends State<PropertyChatScreen> {
                   : CrossAxisAlignment.start,
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 12),
                   decoration: BoxDecoration(
                     color: message.isUser
                         ? Colors.blue[600]
-                        : (message.isGreeting ? Colors.blue[50] : Colors.white),
+                        : (message.isGreeting
+                        ? Colors.blue[50]
+                        : Colors.white),
                     borderRadius: BorderRadius.only(
                       topLeft: const Radius.circular(18),
                       topRight: const Radius.circular(18),
-                      bottomLeft: Radius.circular(message.isUser ? 18 : 0),
-                      bottomRight: Radius.circular(message.isUser ? 0 : 18),
+                      bottomLeft: Radius.circular(
+                          message.isUser ? 18 : 0),
+                      bottomRight: Radius.circular(
+                          message.isUser ? 0 : 18),
                     ),
                     boxShadow: [
                       if (!message.isUser && !message.isGreeting)
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.05),
+                          color:
+                          Colors.black.withOpacity(0.05),
                           blurRadius: 6,
                           offset: const Offset(0, 2),
                         ),
@@ -377,15 +431,20 @@ class _PropertyChatScreenState extends State<PropertyChatScreen> {
                     message.text,
                     style: TextStyle(
                       fontSize: 15,
-                      color: message.isUser ? Colors.white : Colors.black87,
+                      color: message.isUser
+                          ? Colors.white
+                          : Colors.black87,
                       height: 1.4,
                     ),
                   ),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  DateFormat('h:mm a').format(message.timestamp),
-                  style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                  DateFormat('h:mm a')
+                      .format(message.timestamp),
+                  style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.grey[500]),
                 ),
               ],
             ),
@@ -396,7 +455,8 @@ class _PropertyChatScreenState extends State<PropertyChatScreen> {
               child: const CircleAvatar(
                 radius: 16,
                 backgroundColor: Colors.black12,
-                child: Icon(Icons.person, size: 16, color: Colors.white),
+                child: Icon(Icons.person,
+                    size: 16, color: Colors.white),
               ),
             ),
         ],
@@ -409,7 +469,8 @@ class _PropertyChatScreenState extends State<PropertyChatScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(24, 24, 24, 12),
+          padding:
+          const EdgeInsets.fromLTRB(24, 24, 24, 12),
           child: Text(
             'Matching Properties (${_filteredProperties.length})',
             style: const TextStyle(
@@ -420,17 +481,20 @@ class _PropertyChatScreenState extends State<PropertyChatScreen> {
           ),
         ),
         SizedBox(
-          height: 280, // Increased height for better card display
+          height: 280,
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+            padding:
+            const EdgeInsets.symmetric(horizontal: 16),
             physics: const BouncingScrollPhysics(),
             itemCount: _filteredProperties.length,
             itemBuilder: (context, index) {
               return Container(
-                width: 260, // Wider cards for better content display
-                margin: const EdgeInsets.only(right: 16, bottom: 16),
-                child: _buildPropertyCard(_filteredProperties[index]),
+                width: 260,
+                margin:
+                const EdgeInsets.only(right: 16, bottom: 16),
+                child: _buildPropertyCard(
+                    _filteredProperties[index]),
               );
             },
           ),
@@ -453,7 +517,8 @@ class _PropertyChatScreenState extends State<PropertyChatScreen> {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => PropertyDetailScreen(property: property),
+            builder: (context) =>
+                PropertyDetailScreen(property: property),
           ),
         );
       },
@@ -465,16 +530,15 @@ class _PropertyChatScreenState extends State<PropertyChatScreen> {
         clipBehavior: Clip.antiAlias,
         child: ConstrainedBox(
           constraints: BoxConstraints(
-            minHeight: 260, // Minimum height to ensure content fits
-            maxHeight: 300, // Maximum height to prevent overflow
+            minHeight: 260,
+            maxHeight: 300,
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min, // Important for proper sizing
+            mainAxisSize: MainAxisSize.min,
             children: [
-              // Property Image with Aspect Ratio
               AspectRatio(
-                aspectRatio: 16 / 9, // Standard widescreen aspect ratio
+                aspectRatio: 16 / 9,
                 child: Container(
                   color: Colors.grey[200],
                   child: CachedNetworkImage(
@@ -483,21 +547,22 @@ class _PropertyChatScreenState extends State<PropertyChatScreen> {
                     placeholder: (context, url) => Center(
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation(Colors.blue[300]!),
+                        valueColor:
+                        AlwaysStoppedAnimation(Colors.blue[300]!),
                       ),
                     ),
                     errorWidget: (context, url, error) => Center(
-                      child: Icon(Icons.home, size: 50, color: Colors.grey[400]),
+                      child: Icon(Icons.home,
+                          size: 50, color: Colors.grey[400]),
                     ),
                   ),
                 ),
               ),
-
-              // Property Details
               Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment:
+                  CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
@@ -511,10 +576,9 @@ class _PropertyChatScreenState extends State<PropertyChatScreen> {
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 8),
-
-                    // Price and basic info
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      mainAxisAlignment:
+                      MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
                           price,
@@ -526,16 +590,16 @@ class _PropertyChatScreenState extends State<PropertyChatScreen> {
                         ),
                         Row(
                           children: [
-                            _buildAmenityIcon(Icons.king_bed, '$bedrooms'),
+                            _buildAmenityIcon(
+                                Icons.king_bed, '$bedrooms'),
                             const SizedBox(width: 8),
-                            _buildAmenityIcon(Icons.bathtub, '$bathrooms'),
+                            _buildAmenityIcon(
+                                Icons.bathtub, '$bathrooms'),
                           ],
                         ),
                       ],
                     ),
                     const SizedBox(height: 12),
-
-                    // Location
                     Row(
                       children: [
                         Icon(Icons.location_on,
@@ -564,6 +628,7 @@ class _PropertyChatScreenState extends State<PropertyChatScreen> {
       ),
     );
   }
+
   Widget _buildAmenityIcon(IconData icon, String text) {
     return Row(
       children: [

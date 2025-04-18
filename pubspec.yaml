@@ -43,6 +43,11 @@ dependencies:
   cupertino_icons: ^1.0.8
   flutterfire_cli: ^1.1.0
   http: ^1.3.0
+  google_fonts: ^6.2.1
+  google_sign_in: ^6.3.0
+  firebase_auth: ^4.16.0
+  provider: ^6.1.4
+  connectivity_plus: ^6.1.3
 
 dev_dependencies:
   flutter_test:
@@ -69,6 +74,8 @@ flutter:
   # To add assets to your application, add an assets section, like this:
   assets:
     - assets/env/.env
+    - assets/Images/BaityAI.png
+    - assets/BaityAI.png
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
 

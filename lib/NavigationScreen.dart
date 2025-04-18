@@ -1,11 +1,10 @@
 
-
-
 import 'package:baytiai/profileScreen.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import 'ChatScreen.dart';
+import 'PropertyListScreen.dart';
 import 'main.dart';
 
 class MainNavigationScreen extends StatefulWidget {

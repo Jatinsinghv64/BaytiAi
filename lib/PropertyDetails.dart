@@ -115,7 +115,7 @@ class PropertyDetailScreen extends StatelessWidget {
                     children: [
                       _buildDetailFeature(Icons.bed, '${data['bedrooms'] ?? 0} Beds'),
                       _buildDetailFeature(Icons.bathtub, '${data['bathrooms'] ?? 0} Baths'),
-                      _buildDetailFeature(Icons.square_foot, '${data['area'] ?? 0} sqft'),
+                      _buildDetailFeature(Icons.square_foot, '${data['propertySize'] ?? 0} sqft'),
                       _buildDetailFeature(Icons.star, '${data['rating']?.toStringAsFixed(1) ?? '0.0'}'),
                     ],
                   ),
@@ -147,7 +147,7 @@ class PropertyDetailScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  _buildDetailRow('Property Type', data['type'] ?? 'N/A'),
+                  _buildDetailRow('Property Type', data['propertyType'] ?? 'N/A'),
                   _buildDetailRow('Year Built', data['yearBuilt']?.toString() ?? 'N/A'),
                   _buildDetailRow('Garage', '${data['garage'] ?? 0} spaces'),
                   _buildDetailRow('Floor Plan', data['floorPlan'] ?? 'N/A'),
