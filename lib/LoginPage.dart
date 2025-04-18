@@ -35,81 +35,66 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _signInWithEmailAndPassword() async {
     if (!_formKey.currentState!.validate()) return;
-    if (!_hasNetworkConnection) {
-      _showErrorDialog('No internet connection');
-      return;
-    }
 
     setState(() => _isLoading = true);
 
     try {
-      final user = await _authService.signInWithEmailPassword(
-        _emailController.text.trim(),
-        _passwordController.text.trim(),
+      await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: _emailController.text.trim(),
+        password: _passwordController.text.trim(),
+      );
+      // AuthWrapper will automatically handle navigation
+    } on FirebaseAuthException catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message ?? 'Login failed')),
+      );
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }  Future<void> _showEmailVerificationDialog(User user) async {
+    try {
+      setState(() => _isLoading = false);
+
+      bool? resend = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          title: const Text('Email Verification Required'),
+          content: const Text('Please verify your email address before logging in.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Resend Email'),
+            ),
+          ],
+        ),
       );
 
-      if (user != null && !user.emailVerified) {
-        await _showEmailVerificationDialog(user);
-        return;
-      }
-
-      if (user != null && mounted) {
-        Navigator.pushReplacementNamed(context, '/home');
-      }
-    } on AuthException catch (e) {
-      _showErrorDialog(e.message);
-    } catch (e) {
-      _showErrorDialog('An unexpected error occurred');
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
-    }
-  }
-
-  Future<void> _showEmailVerificationDialog(User user) async {
-    setState(() => _isLoading = false);
-
-    bool? resend = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: const Text('Email Verification Required'),
-        content: const Text('Please verify your email address before logging in.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Resend Email'),
-          ),
-        ],
-      ),
-    );
-
-    if (resend == true) {
-      setState(() => _isLoading = true);
-      try {
+      if (resend == true && mounted) {
+        setState(() => _isLoading = true);
         await user.sendEmailVerification();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Verification email sent!')),
           );
         }
-      } catch (e) {
-        if (mounted) {
-          _showErrorDialog('Failed to send verification email');
-        }
-      } finally {
-        if (mounted) {
-          setState(() => _isLoading = false);
-        }
       }
+    } catch (e) {
+      if (mounted) {
+        _showErrorDialog('Failed to send verification email');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+      // Always sign out if email isn't verified
+      await FirebaseAuth.instance.signOut();
     }
   }
-
   void _showErrorDialog(String message) {
     showDialog(
       context: context,
@@ -158,31 +143,17 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget _buildHeader() {
     return Column(
       children: [
-        const Icon(
-          Icons.home_work,
-          size: 80,
-          color: Colors.blue,
+        // Replace Icon with your image
+        Image.asset(
+          'assets/Images/BaityAI-2.png', // Path to your image asset
+          width: 220, // Adjust width as needed
+          height: 220, // Adjust height as needed
+          fit: BoxFit.contain, // Maintain aspect ratio
         ),
-        const SizedBox(height: 16),
-        Text(
-          'Property Finder',
-          style: GoogleFonts.poppins(
-            fontSize: 28,
-            fontWeight: FontWeight.bold,
-            color: Colors.blue[800],
-          ),
-        ),
-        Text(
-          'Find your dream home',
-          style: GoogleFonts.poppins(
-            fontSize: 16,
-            color: Colors.grey[600],
-          ),
-        ),
+        // const SizedBox(height: 16),
       ],
     );
   }
-
   Widget _buildLoginForm() {
     return Container(
       padding: const EdgeInsets.all(24),
@@ -362,6 +333,10 @@ class AuthService {
       );
       return credential.user;
     } on FirebaseAuthException catch (e) {
+      // If we get here but auth succeeded somehow, sign out
+      if (_auth.currentUser != null) {
+        await _auth.signOut();
+      }
       throw AuthException(_getErrorMessage(e));
     }
   }

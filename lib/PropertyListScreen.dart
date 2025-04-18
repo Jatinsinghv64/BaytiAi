@@ -23,7 +23,7 @@ class _PropertyListScreenState extends State<PropertyListScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Premium Properties'),
+        title: const Text('All Properties', style: TextStyle(color: Color(0xff1150ab)),),
         actions: [
           IconButton(
             icon: const Icon(Icons.search),

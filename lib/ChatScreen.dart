@@ -309,7 +309,7 @@ Example response:
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Real Estate Assistant'),
+        title: const Text('BaytiAi',style: TextStyle(color: Color(0xff1150ab)),),
         actions: [
           IconButton(
             icon: const Icon(Icons.help_outline),
@@ -690,7 +690,7 @@ Example response:
           Container(
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: Colors.blue[600],
+              color: Color(0xff1150ab),
               boxShadow: [
                 BoxShadow(
                   color: Colors.blue.withOpacity(0.2),

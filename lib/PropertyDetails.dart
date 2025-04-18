@@ -16,7 +16,7 @@ class PropertyDetailScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(data['title'] ?? 'Property Details'),
+        title: Text(data['title'] ?? 'Property Details',style: TextStyle(color: Color(0xff1150ab)),),
         actions: [
           IconButton(
             icon: const Icon(Icons.favorite_border),

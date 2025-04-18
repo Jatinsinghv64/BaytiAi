@@ -61,11 +61,12 @@ class PropertyApp extends StatelessWidget {
           ),
         ),
       ),
-      home: const AuthWrapper(),
+      home: const AuthWrapper(), // New screen to handle auth state
     );
   }
 }
 
+/// New widget to decide where to navigate after checking auth
 class AuthWrapper extends StatefulWidget {
   const AuthWrapper({super.key});
 
@@ -74,39 +75,34 @@ class AuthWrapper extends StatefulWidget {
 }
 
 class _AuthWrapperState extends State<AuthWrapper> {
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    // Minimum loading time of 2 seconds
+    Future.delayed(const Duration(seconds: 4), () {
+      if (mounted) setState(() => _isLoading = false);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) return const SplashScreen();
+
     return StreamBuilder<User?>(
       stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
+          return const SplashScreen();
         }
 
-        if (snapshot.hasError) {
-          return Center(child: Text('Auth error: ${snapshot.error}'));
+        if (snapshot.hasData) {
+          return const MainNavigationScreen();
         }
 
-        return snapshot.hasData
-            ? const MainNavigationScreen()
-            : const LoginScreen();
+        return const LoginScreen();
       },
     );
   }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
